@@ -9,31 +9,33 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
 
-class NetworkScanner {
+class NetworkScanner(
+    searchIpId: String,
+    private val portsToCheck: List<Any>,
+    timeout: Long = 1,
+    private val maxConcurrentRequests: Int = 30
+) {
     private val client = OkHttpClient.Builder()
-        .connectTimeout(1, TimeUnit.SECONDS)
-        .readTimeout(1, TimeUnit.SECONDS)
-        .writeTimeout(1, TimeUnit.SECONDS)
+        .connectTimeout(timeout, TimeUnit.SECONDS)
+        .readTimeout(timeout, TimeUnit.SECONDS)
+        .writeTimeout(timeout, TimeUnit.SECONDS)
         .build();
-    private val portsToCheck = listOf(3030, 5050, 5500, 3300, 80, 8080);
-    private val subnetPrefix = "192.168.1.";
-    private val maxConcurrentRequests = 50;
+    private var subnetPrefix = "192.168.$searchIpId";
 
-    suspend fun scanNetwork(): MutableList<List<String>> = coroutineScope {
-        val activeUrls = mutableListOf<List<String>>();
+    suspend fun scanNetwork(): MutableList<NetworkScanRes> = coroutineScope {
+        val activeUrls = mutableListOf<NetworkScanRes>();
         val semaphore = Semaphore(maxConcurrentRequests);
 
         coroutineScope {
             val jobs = (1..30).flatMap { host ->
                 portsToCheck.map { port ->
                     async(Dispatchers.IO) {
-                        val ip = "$subnetPrefix$host";
-                        val url = "http://$ip:$port";
+                        val url = "http://$subnetPrefix.$host:$port";
 
                         semaphore.withPermit {
                             val siteInfo = getUrlInfo(url);
-                            if (siteInfo.isNotEmpty()) {
-                                println("SUCCESS: ${siteInfo[1]}");
+                            if (siteInfo !== null) {
+                                println("SUCCESS: ${siteInfo.url}");
                                 synchronized(activeUrls) {
                                     activeUrls.add(siteInfo);
                                 }
@@ -49,18 +51,25 @@ class NetworkScanner {
         activeUrls;
     }
 
-    private fun getUrlInfo(url: String): List<String> {
+    private fun getUrlInfo(url: String): NetworkScanRes? {
         return try {
             val request = Request.Builder().url(url).build();
             val response = client.newCall(request).execute();
-            listOf(getHTMLTitle(response.body.string()), url);
+            NetworkScanRes(url, getHTMLTitle(response.body.string()));
         } catch (e: Exception) {
-            listOf();
+             null;
         }
     }
 
     private fun getHTMLTitle(input: String): String = "<title>(.*?)</title>".toRegex()
         .find(input)?.groupValues?.get(1) ?: "";
+}
+
+class NetworkScanRes (
+    val url: String = "",
+    val title: String = ""
+) {
+
 }
 
 suspend fun <T> Semaphore.withPermit(block: suspend () -> T): T {

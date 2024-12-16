@@ -56,7 +56,9 @@ class MainActivity : ComponentActivity() {
 fun MyApp() {
     val isLoading = remember { mutableStateOf(false) }
     val isClicked = remember { mutableStateOf(false) }
-    val activeSites = remember { mutableStateOf<List<List<String>>>(emptyList()) }
+    val searchIpId = remember { mutableStateOf("1") }
+    val portsToCheck = remember { mutableStateOf(listOf(3030, 5050, 5500, 3300, 80, 8080)) }
+    val activeSites = remember { mutableStateOf<List<NetworkScanRes>>(emptyList()) }
     val coroutineScope = rememberCoroutineScope()
 
     fun onLoadingButtonClicked() {
@@ -65,7 +67,10 @@ fun MyApp() {
         isLoading.value = true;
 
         coroutineScope.launch {
-            val aSites = NetworkScanner().scanNetwork();
+            val aSites = NetworkScanner(
+                searchIpId = searchIpId.value,
+                portsToCheck = portsToCheck.value
+            ).scanNetwork();
             activeSites.value = aSites;
             isLoading.value = false;
         }
@@ -125,11 +130,9 @@ fun MyApp() {
 }
 
 @Composable
-fun HostCards(siteInfo: List<String>) {
+fun HostCards(siteInfo: NetworkScanRes) {
     val ctx = LocalContext.current;
 
-    val title = siteInfo[0];
-    val url = siteInfo[1];
     Card(
         modifier = Modifier
             .fillMaxSize()
@@ -148,23 +151,23 @@ fun HostCards(siteInfo: List<String>) {
             verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically)
         ) {
             Text(
-                text = title.ifEmpty { "No Title" }, style = Typography.titleLarge
+                text = siteInfo.title.ifEmpty { "No Title" }, style = Typography.titleLarge
             )
             Text(
-                text = url, style = Typography.bodyLarge
+                text = siteInfo.url, style = Typography.bodyLarge
             )
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
-                    onClick = { openURL(url, ctx); },
+                    onClick = { openURL(siteInfo.url, ctx); },
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(text = "External", style = Typography.bodyLarge)
                 }
                 Button(
-                    onClick = { openUrlInAppBrowser(url, ctx); },
+                    onClick = { openUrlInAppBrowser(siteInfo.url, ctx); },
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.weight(1f)
                 ) {
