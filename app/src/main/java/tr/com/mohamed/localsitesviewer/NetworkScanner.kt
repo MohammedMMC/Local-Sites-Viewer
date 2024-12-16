@@ -11,7 +11,7 @@ import java.util.concurrent.TimeUnit
 
 class NetworkScanner(
     searchIpId: String,
-    private val portsToCheck: List<Any>,
+    private val portsToCheck: List<String>,
     timeout: Long = 1,
     private val maxConcurrentRequests: Int = 30
 ) {
@@ -30,13 +30,14 @@ class NetworkScanner(
             val jobs = (1..30).flatMap { host ->
                 portsToCheck.map { port ->
                     async(Dispatchers.IO) {
-                        val url = "http://$subnetPrefix.$host:$port";
+                        val ip = "$subnetPrefix.$host:$port";
 
                         semaphore.withPermit {
-                            val siteInfo = getUrlInfo(url);
+                            val siteInfo = getUrlInfo("http://$ip");
                             if (siteInfo !== null) {
                                 println("SUCCESS: ${siteInfo.url}");
                                 synchronized(activeUrls) {
+                                    siteInfo.ip = ip;
                                     activeUrls.add(siteInfo);
                                 }
                             }
@@ -67,7 +68,8 @@ class NetworkScanner(
 
 class NetworkScanRes (
     val url: String = "",
-    val title: String = ""
+    val title: String = "",
+    var ip: String = ""
 ) {
 
 }

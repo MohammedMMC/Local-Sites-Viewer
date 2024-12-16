@@ -17,14 +17,17 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardColors
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -34,6 +37,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -57,7 +63,7 @@ fun MyApp() {
     val isLoading = remember { mutableStateOf(false) }
     val isClicked = remember { mutableStateOf(false) }
     val searchIpId = remember { mutableStateOf("1") }
-    val portsToCheck = remember { mutableStateOf(listOf(3030, 5050, 5500, 3300, 80, 8080)) }
+    val portsToCheck = remember { mutableStateOf(listOf<String>("3030", "5050", "5500", "3300", "80", "8080")) }
     val activeSites = remember { mutableStateOf<List<NetworkScanRes>>(emptyList()) }
     val coroutineScope = rememberCoroutineScope()
 
@@ -94,6 +100,52 @@ fun MyApp() {
                     .fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 5.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "IP RANGE:  ",
+                        style = Typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "192.168.",
+                        style = Typography.titleLarge,
+                        color = Color.Gray
+                    )
+                    BasicTextField(
+                        modifier = Modifier
+                            .width(IntrinsicSize.Min)
+                            .widthIn(min = 20.dp),
+                        value = searchIpId.value,
+                        textStyle = Typography.titleLarge.plus(
+                            TextStyle(
+                                textAlign = TextAlign.Center,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        ),
+                        onValueChange = { icv ->
+                            if (icv.isEmpty() || icv.all { it.isDigit() } && icv.toIntOrNull()
+                                    ?.let { it in 0..254 } == true) searchIpId.value = icv
+                        }
+                    )
+                    Text(
+                        text = ".*",
+                        style = Typography.titleLarge,
+                        color = Color.Gray
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    for (port in portsToCheck.value) {
+                        PortsCard(port);
+                    }
+                }
                 Button(
                     onClick = {
                         onLoadingButtonClicked();
@@ -120,7 +172,7 @@ fun MyApp() {
                 ) {
                     if (!isLoading.value && activeSites.value.isNotEmpty()) {
                         items(activeSites.value) {
-                            HostCards(it)
+                            HostCard(it)
                         }
                     }
                 }
@@ -130,7 +182,12 @@ fun MyApp() {
 }
 
 @Composable
-fun HostCards(siteInfo: NetworkScanRes) {
+fun PortsCard(port: String) {
+
+}
+
+@Composable
+fun HostCard(siteInfo: NetworkScanRes) {
     val ctx = LocalContext.current;
 
     Card(
@@ -154,7 +211,7 @@ fun HostCards(siteInfo: NetworkScanRes) {
                 text = siteInfo.title.ifEmpty { "No Title" }, style = Typography.titleLarge
             )
             Text(
-                text = siteInfo.url, style = Typography.bodyLarge
+                text = siteInfo.ip.ifEmpty { siteInfo.url }, style = Typography.bodyLarge
             )
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
