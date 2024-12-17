@@ -10,24 +10,24 @@ import okhttp3.Request
 import java.util.concurrent.TimeUnit
 
 class NetworkScanner(
-    searchIpId: String,
+    private val subnetPrefix: String,
     private val portsToCheck: List<String>,
+    private val range: IntRange = 1..254,
     timeout: Long = 1,
-    private val maxConcurrentRequests: Int = 30
+    private val maxConcurrentRequests: Int = 50
 ) {
     private val client = OkHttpClient.Builder()
         .connectTimeout(timeout, TimeUnit.SECONDS)
         .readTimeout(timeout, TimeUnit.SECONDS)
         .writeTimeout(timeout, TimeUnit.SECONDS)
         .build();
-    private var subnetPrefix = "192.168.$searchIpId";
 
     suspend fun scanNetwork(): MutableList<NetworkScanRes> = coroutineScope {
         val activeUrls = mutableListOf<NetworkScanRes>();
         val semaphore = Semaphore(maxConcurrentRequests);
 
         coroutineScope {
-            val jobs = (1..30).flatMap { host ->
+            val jobs = (range).flatMap { host ->
                 portsToCheck.map { port ->
                     async(Dispatchers.IO) {
                         val ip = "$subnetPrefix.$host:$port";

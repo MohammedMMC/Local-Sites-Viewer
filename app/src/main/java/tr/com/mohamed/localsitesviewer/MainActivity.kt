@@ -1,33 +1,27 @@
 package tr.com.mohamed.localsitesviewer;
 
-import android.annotation.SuppressLint
+import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.widget.Button
-import android.widget.TextView
+import android.widget.EditText
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonColors
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardColors
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -35,17 +29,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.colorResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import org.json.JSONArray
 import tr.com.mohamed.localsitesviewer.ui.theme.LocalSitesViewerTheme
 import tr.com.mohamed.localsitesviewer.ui.theme.Typography
+import java.net.NetworkInterface
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -60,25 +50,136 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun MyApp() {
+    val ctx = LocalContext.current;
     val isLoading = remember { mutableStateOf(false) }
     val isClicked = remember { mutableStateOf(false) }
-    val searchIpId = remember { mutableStateOf("1") }
-    val portsToCheck = remember { mutableStateOf(listOf<String>("3030", "5050", "5500", "3300", "80", "8080")) }
+    val subnetPrefix = remember { mutableStateOf("") }
+    val portsToCheck = remember { mutableStateOf(getList(ctx, "ports")) }
     val activeSites = remember { mutableStateOf<List<NetworkScanRes>>(emptyList()) }
     val coroutineScope = rememberCoroutineScope()
 
+    if (portsToCheck.value.isEmpty()) {
+        portsToCheck.value = saveList(
+            ctx, "ports", listOf<String>(
+                "+ Add",
+                "80",
+                "8080",
+                "3300",
+                "3030",
+                "5500",
+                "5050"
+            )
+        )
+    }
+
+    fun getLocalIp(): String {
+        return NetworkInterface.getNetworkInterfaces().toList()
+            .flatMap { it.inetAddresses.toList() }
+            .firstOrNull { !it.isLoopbackAddress && it.hostAddress?.contains(':') == false }
+            ?.hostAddress ?: "192.168.1.1";
+    }
+
     fun onLoadingButtonClicked() {
         if (isLoading.value) return;
+        subnetPrefix.value = getLocalIp().substringBeforeLast(".");
         isClicked.value = true;
         isLoading.value = true;
 
         coroutineScope.launch {
             val aSites = NetworkScanner(
-                searchIpId = searchIpId.value,
+                subnetPrefix = subnetPrefix.value,
                 portsToCheck = portsToCheck.value
             ).scanNetwork();
             activeSites.value = aSites;
             isLoading.value = false;
+        }
+    }
+
+    fun showModal(
+        port: String,
+        forDelete: Boolean = false, context: Context
+    ) {
+        val portInput = EditText(context);
+        portInput.hint = "Your port, Example: 3030, 3300";
+
+        val builder = AlertDialog.Builder(context);
+        builder.setTitle(if (forDelete) "Port: $port" else "Add a Port")
+            .setMessage("Are you sure you want to delete the port?")
+            .setPositiveButton(if (forDelete) "Delete" else "Add") { _, _ ->
+                if (forDelete) {
+                    portsToCheck.value = portsToCheck.value.filter { it != port };
+                    saveList(context, "ports", portsToCheck.value);
+                } else {
+                    val port2Add = portInput.text.toString();
+
+                    if (port2Add.contains(",")) {
+                        val ports2Add = port2Add.split(",");
+                        ports2Add.forEach {
+                            portsToCheck.value += it.filter { it != ' ' };
+                        }
+                    } else {
+                        portsToCheck.value += port2Add;
+                    }
+
+                    saveList(context, "ports", portsToCheck.value);
+                }
+                Toast.makeText(
+                    context,
+                    if (forDelete) "Deleted Successfully!" else "Added Successfully!",
+                    Toast.LENGTH_SHORT
+                ).show();
+            }
+        builder.setNeutralButton("Cancel") { dialog, _ -> dialog.dismiss() }
+        if (!forDelete) {
+            builder.setView(portInput);
+        }
+
+        val dialog = builder.create();
+        dialog.show();
+    }
+
+    @Composable
+    fun PortsCard(port: String, modifier: Modifier = Modifier) {
+        if (port == "+ Add") {
+            Card(
+                onClick = {
+                    showModal(
+                        forDelete = false,
+                        context = ctx,
+                        port = port
+                    )
+                },
+                border = BorderStroke(
+                    width = 2.dp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            ) {
+                Text(
+                    text = port,
+                    modifier = Modifier.padding(
+                        vertical = 15.dp,
+                        horizontal = 10.dp
+                    ),
+                );
+            }
+            return;
+        }
+
+        Card(
+            onClick = {
+                showModal(
+                    forDelete = true,
+                    context = ctx,
+                    port = port
+                )
+            },
+            modifier = modifier,
+            border = BorderStroke(width = 2.dp, color = MaterialTheme.colorScheme.primary)
+        ) {
+            Text(
+                text = port,
+                modifier = Modifier.padding(vertical = 15.dp, horizontal = 10.dp),
+            );
         }
     }
 
@@ -100,50 +201,69 @@ fun MyApp() {
                     .fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 5.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
+                Card(
+                    border = BorderStroke(
+                        width = 2.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 ) {
-                    Text(
-                        text = "IP RANGE:  ",
-                        style = Typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "192.168.",
-                        style = Typography.titleLarge,
-                        color = Color.Gray
-                    )
-                    BasicTextField(
+                    Row(
                         modifier = Modifier
-                            .width(IntrinsicSize.Min)
-                            .widthIn(min = 20.dp),
-                        value = searchIpId.value,
-                        textStyle = Typography.titleLarge.plus(
-                            TextStyle(
-                                textAlign = TextAlign.Center,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        ),
-                        onValueChange = { icv ->
-                            if (icv.isEmpty() || icv.all { it.isDigit() } && icv.toIntOrNull()
-                                    ?.let { it in 0..254 } == true) searchIpId.value = icv
-                        }
-                    )
-                    Text(
-                        text = ".*",
-                        style = Typography.titleLarge,
-                        color = Color.Gray
-                    )
+                            .fillMaxWidth()
+                            .padding(vertical = 10.dp, horizontal = 20.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${subnetPrefix.value}.*",
+                            style = Typography.titleLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+//                        BasicTextField(
+//                            modifier = Modifier
+//                                .width(IntrinsicSize.Min)
+//                                .widthIn(min = 20.dp),
+//                            value = subnetPrefix.value,
+//                            textStyle = Typography.titleLarge.plus(
+//                                TextStyle(
+//                                    textAlign = TextAlign.Center,
+//                                    color = MaterialTheme.colorScheme.onSurface
+//                                )
+//                            ),
+//                            onValueChange = { icv ->
+//                                if (icv.isEmpty() || icv.all { it.isDigit() } && icv.toIntOrNull()
+//                                        ?.let { it in 0..254 } == true) subnetPrefix.value = icv
+//                            }
+//                        )
+//                        Text(
+//                            text = ".*",
+//                            style = Typography.titleLarge,
+//                            color = Color.Gray
+//                        )
+                    }
                 }
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
-                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 15.dp),
+                    horizontalArrangement = Arrangement.Start,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    for (port in portsToCheck.value) {
-                        PortsCard(port);
+                    Row(
+                        modifier = Modifier.padding(top = 15.dp)
+                    ) {
+                        LazyRow {
+                            items(portsToCheck.value) {
+                                if (it == "+ Add") {
+                                    PortsCard(port = it);
+                                } else {
+                                    PortsCard(
+                                        modifier = Modifier.padding(start = 15.dp),
+                                        port = it
+                                    );
+                                }
+                            }
+                        }
                     }
                 }
                 Button(
@@ -179,11 +299,6 @@ fun MyApp() {
             }
         })
     }
-}
-
-@Composable
-fun PortsCard(port: String) {
-
 }
 
 @Composable
@@ -242,3 +357,18 @@ fun openUrlInAppBrowser(url: String, ctx: Context) =
     CustomTabsIntent.Builder()
         .setShowTitle(true)
         .build().launchUrl(ctx, Uri.parse(url))
+
+fun saveList(context: Context, key: String, list: List<String>): List<String> {
+    val jsonArray = JSONArray(list);
+    context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+        .edit().putString(key, jsonArray.toString()).apply();
+    return list;
+}
+
+fun getList(context: Context, key: String): List<String> {
+    val jsonString = context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+        .getString(key, "[]") ?: "[]";
+    return List(JSONArray(jsonString).length()) { i ->
+        JSONArray(jsonString).getString(i)
+    }
+}
